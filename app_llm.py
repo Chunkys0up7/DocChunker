@@ -27,7 +27,8 @@ import re
 from utils.llm_connector import LLMConnector
 
 # Perplexity API key (user provided)
-PPLX_API_KEY = "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"
+# PPLX_API_KEY = "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"
+PPLX_API_KEY = os.environ.get("PPLX_API_KEY", "")  # Set your Perplexity API key in the environment
 PPLX_API_URL = "https://api.perplexity.ai/chat/completions"
 # Use the supported model 'sonar' as per latest docs
 PPLX_MODEL = "sonar"
