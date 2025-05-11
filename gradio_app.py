@@ -16,6 +16,7 @@ from metadata.metadata_extractor import extract_rich_metadata
 import shutil
 import os
 from utils.llm_connector import LLMConnector
+from config import PPLX_API_KEY
 
 # Helper to process files and return output files as (filename, content) tuples
 def process_files(files, chunk_size, llm_enabled=False, llm_connector=None):
@@ -70,7 +71,6 @@ def rag_pipeline(upload_method, file_upload, folder_zip, chunk_size, llm_enabled
             for ext in [".txt", ".pdf", ".docx", ".pptx"]:
                 files_to_process.extend([str(p) for p in Path(temp_dir).rglob(f"*{ext}")])
     # Process files
-    PPLX_API_KEY = "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"  # Or load from config/env
     llm_connector = LLMConnector(api_key=PPLX_API_KEY, model="sonar") if llm_enabled else None
     output_files = process_files(files_to_process, chunk_size, llm_enabled, llm_connector)
     # Prepare for download: create a ZIP of all outputs
