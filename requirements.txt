@@ -1,0 +1,10 @@
+extract-msg
+python-docx
+python-pptx
+pdfminer.six
+chardet
+lxml
+pillow
+streamlit
+openai
+gradio 
