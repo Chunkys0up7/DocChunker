@@ -15,9 +15,10 @@ from utils.markdown_utils import format_chunk_as_markdown
 from metadata.metadata_extractor import extract_rich_metadata
 import shutil
 import os
+from utils.llm_connector import LLMConnector
 
 # Helper to process files and return output files as (filename, content) tuples
-def process_files(files, chunk_size):
+def process_files(files, chunk_size, llm_enabled=False, llm_connector=None):
     output_files = []
     for file_path in files:
         text = read_file_with_dispatcher(Path(file_path))
@@ -27,13 +28,16 @@ def process_files(files, chunk_size):
         total_chunks = len(chunks)
         for idx, chunk in enumerate(chunks):
             metadata = extract_rich_metadata(Path(file_path), chunk, idx+1, total_chunks, text)
+            if llm_enabled and llm_connector:
+                llm_meta = llm_connector.enrich_metadata(chunk, text)
+                metadata.update(llm_meta)
             md_content = format_chunk_as_markdown(chunk, metadata)
             out_name = f"{Path(file_path).stem}_chunk{idx+1}.txt"
             output_files.append((out_name, md_content))
     return output_files
 
 # Main Gradio function
-def rag_pipeline(upload_method, file_upload, folder_zip, chunk_size):
+def rag_pipeline(upload_method, file_upload, folder_zip, chunk_size, llm_enabled):
     temp_dir = tempfile.mkdtemp(prefix="rag_gradio_")
     files_to_process = []
     # Handle file uploads (support both file-like and NamedString)
@@ -66,7 +70,9 @@ def rag_pipeline(upload_method, file_upload, folder_zip, chunk_size):
             for ext in [".txt", ".pdf", ".docx", ".pptx"]:
                 files_to_process.extend([str(p) for p in Path(temp_dir).rglob(f"*{ext}")])
     # Process files
-    output_files = process_files(files_to_process, chunk_size)
+    PPLX_API_KEY = "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"  # Or load from config/env
+    llm_connector = LLMConnector(api_key=PPLX_API_KEY, model="sonar") if llm_enabled else None
+    output_files = process_files(files_to_process, chunk_size, llm_enabled, llm_connector)
     # Prepare for download: create a ZIP of all outputs
     output_zip_path = Path(temp_dir) / "rag_outputs.zip"
     with zipfile.ZipFile(output_zip_path, 'w') as zipf:
@@ -103,6 +109,7 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     file_upload = gr.File(label="Upload one or more files (TXT, PDF, DOCX, PPTX)", file_count="multiple", file_types=[".txt", ".pdf", ".docx", ".pptx"])
     folder_zip = gr.File(label="Upload a folder as ZIP (all supported files inside)", file_types=[".zip"])
     chunk_size = gr.Number(label="Chunk size (words per chunk)", value=500, precision=0, info="How many words per chunk?")
+    llm_enabled = gr.Checkbox(label="Enable LLM-powered metadata (if configured)", value=False)
     process_btn = gr.Button("🚀 Process Documents", elem_id="process-btn")
     output_zip = gr.File(label="⬇️ Download all as ZIP")
     output_files = gr.Files(label="⬇️ Download individual files")
@@ -112,8 +119,8 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
         return gr.update(visible=method=="Files"), gr.update(visible=method=="Folder as ZIP")
     upload_method.change(toggle_uploaders, inputs=upload_method, outputs=[file_upload, folder_zip])
 
-    def on_process(upload_method, file_upload, folder_zip, chunk_size):
-        zip_path, download_links = rag_pipeline(upload_method, file_upload, folder_zip, int(chunk_size))
+    def on_process(upload_method, file_upload, folder_zip, chunk_size, llm_enabled):
+        zip_path, download_links = rag_pipeline(upload_method, file_upload, folder_zip, int(chunk_size), llm_enabled)
         file_paths = []
         for fname, content in download_links:
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=fname)
@@ -122,6 +129,6 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
             file_paths.append(temp_file.name)
         return zip_path, file_paths
 
-    process_btn.click(on_process, inputs=[upload_method, file_upload, folder_zip, chunk_size], outputs=[output_zip, output_files])
+    process_btn.click(on_process, inputs=[upload_method, file_upload, folder_zip, chunk_size, llm_enabled], outputs=[output_zip, output_files])
 
 demo.launch() 
